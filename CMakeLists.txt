@@ -61,9 +61,9 @@ endif()
 
 # backend options
 option(MNN_METAL "Enable Metal" OFF)
-option(MNN_OPENCL "Enable OpenCL" OFF)
-option(MNN_OPENGL "Enable OpenGL" OFF)
-option(MNN_VULKAN "Enable Vulkan" OFF)
+option(MNN_OPENCL "Enable OpenCL" ON)
+option(MNN_OPENGL "Enable OpenGL" ON)
+option(MNN_VULKAN "Enable Vulkan" ON)
 option(MNN_ARM82 "Enable ARM82" OFF)
 
 # codegen register ops
