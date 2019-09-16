@@ -22,9 +22,10 @@ ReluExecution::ReluExecution(const std::vector<Tensor *> &inputs, const MNN::Op 
     auto preluSizeAlign       = UP_DIV(preluSize, 4) * 4;
     cl::Buffer preluBuffer(mOpenCLBackend->getOpenCLRuntime()->context(), CL_MEM_READ_ONLY | CL_MEM_ALLOC_HOST_PTR,
                            preluSizeAlign * sizeof(float));
+    cl_int error;
     auto preluDataPtrCL = mOpenCLBackend->getOpenCLRuntime()->commandQueue().enqueueMapBuffer(
-        preluBuffer, true, CL_MAP_WRITE, 0, preluSizeAlign * sizeof(float));
-    if(preluDataPtrCL != nullptr){
+        preluBuffer, true, CL_MAP_WRITE, 0, preluSizeAlign * sizeof(float), nullptr, nullptr, &error);
+    if(preluDataPtrCL != nullptr && error == CL_SUCCESS){
         ::memset(preluDataPtrCL, 0, sizeof(float) * preluSizeAlign);
         ::memcpy(preluDataPtrCL, preluDataPtr, preluSize * sizeof(float));
     }else{
@@ -68,18 +69,34 @@ class ReluCreator : public OpenCLBackend::Creator {
 public:
     virtual Execution *onCreate(const std::vector<Tensor *> &inputs, const std::vector<Tensor *> &outputs,
                                 const MNN::Op *op, Backend *backend) const override {
+        // There seems to be a bug on OpenCL compiler of AMD Radeon HD 7000 series. 
+        // When use build option -Dname=definition, definition will be truncated by 
+        // a comma, which violate opencl specification (quote, 'In particular, the definition will 
+        // be truncated by embedded newline characters'.)
+        // So we use ternary operation (A ? B: C) instead of function call with comma 
+        // (e.g, fmax(in,(float4)(0))), when there is a Radeon GPU.
+        bool isRadeonGpu = (static_cast<OpenCLBackend*>(backend)->getOpenCLRuntime()->getGpuType() == RADEON);
+
         if (op->type() == OpType_ReLU6) {
+            if (isRadeonGpu) {
+                return new UnaryExecution("(in<=(float4)0?(float4)0:(in>=(float4)6?(float4)6:in))", backend);
+            }
             return new UnaryExecution("clamp(in,(float4)0,(float4)6)", backend);
         }
         if (op->type() == OpType_ReLU) {
             if (op->main_as_Relu()->slope() == 0.0f) {
-                return new UnaryExecution("fmax(in,(float4)0)", backend);
+                if (isRadeonGpu) {
+                    return new UnaryExecution("(in>(float4)0?in:(float4)0)", backend);
+                }
+                return new UnaryExecution("fmax(in,(float4)(0))", backend);
             }
             auto slope         = op->main_as_Relu()->slope();
             char slopeCStr[30] = {};
             sprintf(slopeCStr, "%.8f", slope);
             std::string slopeStr = slopeCStr;
-
+            if (isRadeonGpu) {
+                return new UnaryExecution("in<(float4)0?" + slopeStr + "f*in:in", backend);
+            }
             return new UnaryExecution("select(" + slopeStr + "f*in,in,in>=(float4)0)", backend);
         }
         if (op->type() == OpType_PReLU) {
@@ -88,6 +105,9 @@ public:
                 char slopeCStr[30] = {};
                 sprintf(slopeCStr, "%.8f", slope);
                 std::string slopeStr = slopeCStr;
+                if (isRadeonGpu) {
+                    return new UnaryExecution("in<(float4)0?" + slopeStr + "f*in:in", backend);
+                }
                 return new UnaryExecution("select(" + slopeStr + "f*in,in,in>=(float4)0)", backend);
             }
             // FUNC_PRINT(1);

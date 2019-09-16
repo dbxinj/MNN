@@ -27,7 +27,7 @@ Backend* Session::_getDefaultBackend() {
     auto defaultType = MNN_FORWARD_CPU;
     if (mBackends.find(defaultType) == mBackends.end()) {
         Backend::Info info;
-        info.type = defaultType;
+        info.type      = defaultType;
         info.numThread = 1;
         mBackends[info.type].reset(BackendFactory::create(info));
     }
@@ -70,9 +70,16 @@ Session::~Session() {
     for (auto& t : mTensors) {
         TensorUtils::clearHandleData(t.second.get());
     }
+    mPipelines.clear();
+    mBackends.clear();
+    mTensors.clear();
 }
 
 ErrorCode Session::run() const {
+    if (mNeedResize) {
+        MNN_ERROR("Can't run session because not resized");
+        return COMPUTE_SIZE_ERROR;
+    }
     for (auto& iter : mPipelines) {
         auto error = iter->execute();
         if (NO_ERROR != error) {
@@ -84,6 +91,10 @@ ErrorCode Session::run() const {
 
 ErrorCode Session::runWithCallBack(const TensorCallBackWithInfo& before, const TensorCallBackWithInfo& end,
                                    bool sync) const {
+    if (mNeedResize) {
+        MNN_ERROR("Can't run session because not resized");
+        return COMPUTE_SIZE_ERROR;
+    }
     for (auto& iter : mPipelines) {
         auto error = iter->executeCallBack(before, end);
         if (NO_ERROR != error) {

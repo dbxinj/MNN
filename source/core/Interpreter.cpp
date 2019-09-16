@@ -14,6 +14,7 @@
 #include "AutoStorage.h"
 #include "MNN_generated.h"
 #include "Session.hpp"
+#include "FileLoader.hpp"
 namespace MNN {
 
 struct Content {
@@ -21,82 +22,6 @@ struct Content {
     const Net* net = nullptr;
     std::vector<std::unique_ptr<Session>> sessions;
     std::map<const Tensor*, const Session*> tensorMap;
-};
-
-class FileLoader {
-public:
-    FileLoader(const char* file) {
-        mFile = fopen(file, "rb");
-    }
-
-    ~FileLoader() {
-        if (nullptr != mFile) {
-            fclose(mFile);
-        }
-        for (auto iter : mBlocks) {
-            MNNMemoryFreeAlign(iter.second);
-        }
-    }
-
-    bool read() {
-        auto block = MNNMemoryAllocAlign(gCacheSize, MNN_MEMORY_ALIGN_DEFAULT);
-        if (nullptr == block) {
-            MNN_PRINT("Memory Alloc Failed\n");
-            return false;
-        }
-        auto size  = fread(block, 1, gCacheSize, mFile);
-        mTotalSize = size;
-        mBlocks.push_back(std::make_pair(size, block));
-
-        while (size == gCacheSize) {
-            block = MNNMemoryAllocAlign(gCacheSize, MNN_MEMORY_ALIGN_DEFAULT);
-            if (nullptr == block) {
-                MNN_PRINT("Memory Alloc Failed\n");
-                return false;
-            }
-            size = fread(block, 1, gCacheSize, mFile);
-            if (size > gCacheSize) {
-                MNN_PRINT("Read file Error\n");
-                MNNMemoryFreeAlign(block);
-                return false;
-            }
-            mTotalSize += size;
-            mBlocks.push_back(std::make_pair(size, block));
-        }
-
-        if (ferror(mFile)) {
-            return false;
-        }
-        return true;
-    }
-
-    bool valid() const {
-        return mFile != nullptr;
-    }
-    inline size_t size() const {
-        return mTotalSize;
-    }
-
-    bool merge(AutoStorage<uint8_t>& buffer) {
-        buffer.reset((int)mTotalSize);
-        if (buffer.get() == nullptr) {
-            MNN_PRINT("Memory Alloc Failed\n");
-            return false;
-        }
-        auto dst   = buffer.get();
-        int offset = 0;
-        for (auto iter : mBlocks) {
-            ::memcpy(dst + offset, iter.second, iter.first);
-            offset += iter.first;
-        }
-        return true;
-    }
-
-private:
-    std::vector<std::pair<size_t, void*>> mBlocks;
-    FILE* mFile                 = nullptr;
-    static const int gCacheSize = 4096;
-    size_t mTotalSize           = 0;
 };
 
 Interpreter* Interpreter::createFromFile(const char* file) {
@@ -240,11 +165,19 @@ Tensor* Interpreter::getSessionOutput(const Session* session, const char* name) 
 }
 
 const std::map<std::string, Tensor*>& Interpreter::getSessionInputAll(const Session* session) const {
-    return session->getInputAll();
+    auto& tensors = session->getInputAll();
+    for (auto& iter : tensors) {
+        mNet->tensorMap.insert(std::make_pair(iter.second, session));
+    }
+    return tensors;
 }
 
 const std::map<std::string, Tensor*>& Interpreter::getSessionOutputAll(const Session* session) const {
-    return session->getOutputAll();
+    auto& tensors = session->getOutputAll();
+    for (auto& iter : tensors) {
+        mNet->tensorMap.insert(std::make_pair(iter.second, session));
+    }
+    return tensors;
 }
 
 void Interpreter::resizeSession(Session* session) {

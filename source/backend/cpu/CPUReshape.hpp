@@ -15,16 +15,16 @@
 namespace MNN {
 class CPUReshape : public Execution {
 public:
-    CPUReshape(Backend *b, MNN_DATA_FORMAT dimType);
+    CPUReshape(Backend *b, MNN_DATA_FORMAT midFormat);
     virtual ~CPUReshape() = default;
     virtual ErrorCode onResize(const std::vector<Tensor *> &inputs, const std::vector<Tensor *> &outputs) override;
     virtual ErrorCode onExecute(const std::vector<Tensor *> &inputs, const std::vector<Tensor *> &outputs) override;
 
 protected:
     Tensor mStorage;
-    MNN_DATA_FORMAT mDimType;
     Tensor mWrapTensorForInput;
     Tensor mWrapTensorForOutput;
+    MNN_DATA_FORMAT mMidFormat;
 };
 } // namespace MNN
 #endif /* CPUReshape_hpp */

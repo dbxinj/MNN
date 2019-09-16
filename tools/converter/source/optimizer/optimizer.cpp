@@ -31,6 +31,8 @@ std::unique_ptr<MNN::NetT> optimizeNet(std::unique_ptr<MNN::NetT>& originNet) {
     // Delete convolution's group parameter
     postTool->turnGroupConvolution();
 
+    postTool->convertBinaryToElementwise();
+
     postTool->removeDeconvolutionShapeInput();
 
     postTool->deleteUnusefulOp();
@@ -51,7 +53,8 @@ std::unique_ptr<MNN::NetT> optimizeNet(std::unique_ptr<MNN::NetT>& originNet) {
     for (auto& op : postTool->mNet->oplists) {
         for (auto index : op->outputIndexes) {
             if (inputSet.find(index) == inputSet.end()) {
-                LOG(INFO) << "Outputs: " << op->name << ", Type = " << MNN::EnumNameOpType(op->type);
+                LOG(INFO) << "Outputs: " << postTool->mNet->tensorName[index]
+                          << ", Type = " << MNN::EnumNameOpType(op->type);
                 break;
             }
         }

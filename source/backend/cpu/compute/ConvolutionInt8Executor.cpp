@@ -144,7 +144,7 @@ ErrorCode ConvolutionInt8Executor::onResize(const std::vector<Tensor*>& inputs, 
     mIm2ColParamter.kernelCountUnit =
         UP_DIV(mIm2ColParamter.icDiv4 * mIm2ColParamter.kernelY * mIm2ColParamter.kernelX, 2);
 
-    TensorUtils::copyShape(inputs[0], &mSrcCopyBuffer);
+    TensorUtils::copyShape(inputs[0], &mSrcCopyBuffer, true);
     mSrcCopyBuffer.buffer().dim[0].extent = 1;
     mSrcCopyBuffer.buffer().type          = halide_type_of<int8_t>();
     TensorUtils::setLinearLayout(&mTempBuffer);
@@ -222,7 +222,7 @@ static void _im2ColCommonZ1(int8_t* colAddr, const int8_t* inputOrigin,
         int sx = ox * im2ColParameter->strideX - im2ColParameter->padX;
         int sy = oy * im2ColParameter->strideY - im2ColParameter->padY;
 
-        int sfy = ALIMAX(0, (UP_DIV(-sy, im2ColParameter->dilateX)));
+        int sfy = ALIMAX(0, (UP_DIV(-sy, im2ColParameter->dilateY)));
         int efy = ALIMIN(kh, UP_DIV(ih - sy, im2ColParameter->dilateY));
         int sfx = ALIMAX(0, (UP_DIV(-sx, im2ColParameter->dilateX)));
         int efx = ALIMIN(kw, UP_DIV(iw - sx, im2ColParameter->dilateX));

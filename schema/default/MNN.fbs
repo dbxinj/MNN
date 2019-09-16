@@ -147,6 +147,7 @@ enum OpType : int {
     DepthwiseConvInt8 = 515,
     PoolInt8 = 516,
     FloatToInt8 = 517,
+    EltwiseInt8 = 518,
 }
 
 table Plugin {
@@ -230,6 +231,7 @@ union OpParameter {
     BatchMatMulParam,
     QuantizedFloatParam,
     DepthSpaceParam, // DepthToSpace and SpaceToDepth using the same parameter
+    EltwiseInt8,
 }
 
 table Op {
@@ -238,6 +240,7 @@ table Op {
     name: string;
     outputIndexes: [int];    
     type: OpType;
+    defaultDimentionFormat : MNN_DATA_FORMAT = NHWC;
 }
 
 table TensorDescribe {
