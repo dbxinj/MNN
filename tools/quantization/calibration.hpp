@@ -14,7 +14,7 @@
 #include "ImageProcess.hpp"
 #include "Interpreter.hpp"
 #include "TensorStatistic.hpp"
-#include "converter/source/IR/MNN_generated.h"
+#include "MNN_generated.h"
 
 // Calibration find the optimal threshold according to KL-divergence
 // process: the below process is applied on the whole Conv|DepthwiseConv layers
@@ -34,7 +34,7 @@ private:
     MNN::NetT* _originaleModel;
     std::shared_ptr<MNN::CV::ImageProcess> _process;
     const int _binNums = 2048;
-    int _imageNum = 0;
+    int _imageNum      = 0;
     int _width;
     int _height;
     std::vector<std::string> _imgaes;
@@ -53,9 +53,10 @@ private:
     // keep mnn forward information
     MNN::Session* _session;
     MNN::Tensor* _inputTensor;
+    std::vector<int> _inputTensorDims;
 
     std::string _featureQuantizeMethod = "KL";
-    std::string _weightQuantizeMethod = "MAX_ABS";
+    std::string _weightQuantizeMethod  = "MAX_ABS";
 
     void _initMNNSession(const uint8_t* modelBuffer, const int bufferSize, const int channels);
     void _initMaps();
