@@ -160,8 +160,44 @@ ErrorCode CPUTranspose::onExecute(const std::vector<Tensor*>& inputs, const std:
                 }
             }
         }
+    } else if (6 == dims) {
+        MNN_ASSERT(permutation.size() == 6);
+        const int stride0 = input->stride(permutation[0]);
+        const int stride1 = input->stride(permutation[1]);
+        const int stride2 = input->stride(permutation[2]);
+        const int stride3 = input->stride(permutation[3]);
+        const int stride4 = input->stride(permutation[4]);
+        const int stride5 = input->stride(permutation[5]);
+
+        const int output0    = output->length(0);
+        const int output1    = output->length(1);
+        const int output2    = output->length(2);
+        const int output3    = output->length(3);
+        const int output4    = output->length(4);
+        const int output5    = output->length(5);
+        const int outStride0 = output->stride(0);
+        const int outStride1 = output->stride(1);
+        const int outStride2 = output->stride(2);
+        const int outStride3 = output->stride(3);
+        const int outStride4 = output->stride(4);
+
+        for (int i = 0; i < output0; i++) {
+            for (int j = 0; j < output1; j++) {
+                for (int k = 0; k < output2; k++) {
+                    for (int m = 0; m < output3; m++) {
+                        for (int n = 0; n < output4; n++) {
+                            for (int p = 0; p < output5; p++) {
+                                dst[i * outStride0 + j * outStride1 + k * outStride2 + m * outStride3 +
+                                    n * outStride4 + p] = src[i * stride0 + j * stride1 + k * stride2 +
+                                    m * stride3 + n * stride4 + p * stride5];
+                            }
+                        }
+                    }
+                }
+            }
+        }
     } else {
-        MNN_PRINT("Transpose Only Support dimension <= 5!\n");
+        MNN_PRINT("Transpose Only Support dimension <= 6!\n");
         MNN_ASSERT(false);
     }
 
