@@ -19,7 +19,7 @@ enum OpType : int {
     QuantizedAdd,
     ArgMax,
     AsString,
-    BatchNorm,
+    InstanceNorm,
     BatchToSpaceND,
     Bias,
     BinaryOp,
@@ -132,8 +132,17 @@ enum OpType : int {
     Convolution3D,
     MatrixBandPart,
     GatherND,
+    DetectionPostProcess,
+    UnravelIndex,
+    ScatterNd,
+    OneHot,
+    BroadcastTo,
+    Dilation2D,
     MaxLayerCount = 128, // this count must bigger than the layer id of last layer
     ConvertTensor = 129,
+    ArgMin = 130,
+    LinSpace = 131,
+    
     PLUGIN = 256, //The Type load from plugin
     //Training Op Start from 257
     Select = 257,
@@ -145,6 +154,8 @@ enum OpType : int {
     PoolGrad,
     SoftmaxGrad,
     Conv2DBackPropFilter,
+    TrainableParam,
+    BatchNorm,
 
     Extra = 512,
     // quantization
@@ -249,7 +260,10 @@ union OpParameter {
     Extra,
     Pool3D,
     Convolution3D,
-    ELU
+    ELU,
+    DetectionPostProcessParam,
+    OneHotParam,
+    PadParam
 }
 
 table Op {
@@ -274,7 +288,10 @@ enum ForwardType : byte {
     OPENGLES,
     VULKAN,
 }
-
+enum Usage : byte {
+    INFERENCE = 0,
+    TRAIN = 1
+}
 table Net {
     bizCode: string;
     extraTensorDescribe: [TensorDescribe];
@@ -285,6 +302,7 @@ table Net {
     sourceType: NetSource = CAFFE;
     tensorName: [string];
     tensorNumber: int = 0;
+    usage:Usage = INFERENCE;  // used to more compatibility in future
 }
 
 root_type Net;

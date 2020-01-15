@@ -6,7 +6,7 @@
 //  Copyright © 2018, Alibaba Group Holding Limited
 //
 
-#include "core/runtime/OpenCLRuntime.hpp"
+#include "backend/opencl/core/runtime/OpenCLRuntime.hpp"
 #include <sys/stat.h>
 #include <cstdlib>
 #include <fstream>
@@ -14,9 +14,9 @@
 #include <string>
 #include <utility>
 #include <vector>
-#include "Macro.h"
+#include "core/Macro.h"
 //#define MNN_OPEN_TIME_TRACE
-#include "AutoTime.hpp"
+#include <MNN/AutoTime.hpp>
 namespace MNN {
 
 extern const std::map<std::string, std::vector<unsigned char>> OpenCLProgramMap;
@@ -46,7 +46,7 @@ OpenCLRuntime::OpenCLRuntime(bool permitFloat16) {
         cl::Platform::setDefault(platforms[0]);
         std::vector<cl::Device> gpuDevices;
         platforms[0].getDevices(CL_DEVICE_TYPE_GPU, &gpuDevices);
-        
+
         if(1 <= gpuDevices.size()){
             mFirstGPUDevicePtr              = std::make_shared<cl::Device>(gpuDevices[0]);
             const std::string deviceName    = mFirstGPUDevicePtr->getInfo<CL_DEVICE_NAME>();
@@ -76,7 +76,7 @@ OpenCLRuntime::OpenCLRuntime(bool permitFloat16) {
             const std::string deviceVendor  = mFirstGPUDevicePtr->getInfo<CL_DEVICE_VENDOR>();
             cl_command_queue_properties properties = 0;
 
-        #ifdef ENABLE_OPENCL_TURNING_PROFILER
+        #ifdef ENABLE_OPENCL_TIME_PROFILER
             properties |= CL_QUEUE_PROFILING_ENABLE;
         #endif
             cl_int err;
@@ -91,8 +91,8 @@ OpenCLRuntime::OpenCLRuntime(bool permitFloat16) {
             } else {
                 mGpuType = OTHER;
             }
-
-            if(mGpuType == ADRENO){
+            const std::string extensions = platforms[0].getInfo<CL_PLATFORM_EXTENSIONS>();
+            if(mGpuType == ADRENO && " " != extensions){
                 std::vector<cl_context_properties> context_properties;
                 context_properties.reserve(5);
                 context_properties.push_back(CL_CONTEXT_PERF_HINT_QCOM);
@@ -103,8 +103,8 @@ OpenCLRuntime::OpenCLRuntime(bool permitFloat16) {
                 mContext = std::shared_ptr<cl::Context>(new cl::Context({*mFirstGPUDevicePtr}, context_properties.data(), nullptr, nullptr, &err));
             }else{
                 mContext = std::shared_ptr<cl::Context>(new cl::Context({*mFirstGPUDevicePtr}, nullptr, nullptr, nullptr, &err));
-            }    
-            
+            }
+
             MNN_CHECK_CL_SUCCESS(err);
 
             mCommandQueuePtr = std::make_shared<cl::CommandQueue>(*mContext, *mFirstGPUDevicePtr, properties, &err);
@@ -117,6 +117,13 @@ OpenCLRuntime::OpenCLRuntime(bool permitFloat16) {
             auto success = mFirstGPUDevicePtr->getInfo(CL_DEVICE_HALF_FP_CONFIG, &fpConfig);
             mIsSupportedFP16     = CL_SUCCESS == success && fpConfig > 0;
             mIsSupportedFP16     = mIsSupportedFP16 && permitFloat16;
+
+            if(getDeviceSupportsExtension(*(mFirstGPUDevicePtr.get()), "cl_arm_integer_dot_product_int8")){
+                mSupportDotInt8 = true;
+            }
+            if(getDeviceSupportsExtension(*(mFirstGPUDevicePtr.get()), "cl_arm_integer_dot_product_accumulate_int8")){
+                mSupportDotAccInt8 = true;
+            }
         }else{
             mIsCreateError = true;
             MNN_ASSERT(1 <= gpuDevices.size());
@@ -152,6 +159,15 @@ std::vector<size_t> OpenCLRuntime::getMaxImage2DSize() {
 bool OpenCLRuntime::isSupportedFP16() const {
     return mIsSupportedFP16;
 }
+
+bool OpenCLRuntime::isSupportedDotInt8() const {
+    return mSupportDotInt8;
+}
+
+bool OpenCLRuntime::isSupportedDotAccInt8() const {
+    return mSupportDotAccInt8;
+}
+
 
 cl::Context &OpenCLRuntime::context() {
     return *mContext;
@@ -209,9 +225,9 @@ cl::Kernel OpenCLRuntime::buildKernel(const std::string &programName, const std:
                                       const std::set<std::string> &buildOptions) {
     std::string buildOptionsStr;
     if (mIsSupportedFP16) {
-        buildOptionsStr = "-DFLOAT=half -DFLOAT4=half4 -DFLOAT16=half16 -DRI_F=read_imageh -DWI_F=write_imageh -DMNN_SUPPORT_FP16";
+        buildOptionsStr = "-DFLOAT=half -DFLOAT4=half4 -DFLOAT16=half16 -DRI_F=read_imageh -DWI_F=write_imageh -DCONVERT_FLOAT4=convert_half4 -DMNN_SUPPORT_FP16";
     } else {
-        buildOptionsStr = "-DFLOAT=float -DFLOAT4=float4 -DRI_F=read_imagef -DFLOAT16=float16 -DWI_F=write_imagef";
+        buildOptionsStr = "-DFLOAT=float -DFLOAT4=float4 -DRI_F=read_imagef -DFLOAT16=float16 -DWI_F=write_imagef -DCONVERT_FLOAT4=convert_float4";
     }
     for (auto &option : buildOptions) {
         buildOptionsStr += " " + option;
@@ -242,6 +258,29 @@ uint64_t OpenCLRuntime::getMaxWorkGroupSize(const cl::Kernel &kernel) {
     uint64_t maxWorkGroupSize = 0;
     MNN_ASSERT(0 == kernel.getWorkGroupInfo(*mFirstGPUDevicePtr, CL_KERNEL_WORK_GROUP_SIZE, &maxWorkGroupSize));
     return maxWorkGroupSize;
+}
+
+uint64_t OpenCLRuntime::GetKernelWaveSize(const cl::Kernel &kernel) {
+    uint64_t kernelWaveSize = 0;
+    MNN_ASSERT(0 == kernel.getWorkGroupInfo(*mFirstGPUDevicePtr, CL_KERNEL_WAVE_SIZE_QCOM, &kernelWaveSize));
+    return kernelWaveSize;
+}
+
+double OpenCLRuntime::getCostTime(const cl::Event *event){
+    mCommandQueuePtr->finish();
+    mStartNanos = event->getProfilingInfo<CL_PROFILING_COMMAND_START>();
+    mStopNanos = event->getProfilingInfo<CL_PROFILING_COMMAND_END>();
+    return (mStopNanos - mStartNanos) / 1000000.0;
+}
+
+double OpenCLRuntime::getQueuedTime(const cl::Event *event){
+    mCommandQueuePtr->finish();
+    return (event->getProfilingInfo<CL_PROFILING_COMMAND_START>() - event->getProfilingInfo<CL_PROFILING_COMMAND_QUEUED>()) / 1000000.0;
+}
+
+double OpenCLRuntime::getSubmitTime(const cl::Event *event){
+    mCommandQueuePtr->finish();
+    return (event->getProfilingInfo<CL_PROFILING_COMMAND_START>() - event->getProfilingInfo<CL_PROFILING_COMMAND_SUBMIT>()) / 1000000.0;
 }
 
 } // namespace MNN

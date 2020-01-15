@@ -22,10 +22,11 @@ public:
         MNN_CHECK(outputs.size() == 1, "Identity Should have one output");
         auto outputVaribale = outputs.front();
 
-        auto outputExpr   = outputVaribale.lock()->expr().first;
+        auto outputExpr   = outputVaribale.lock();
         auto outputExprOp = outputExpr->get();
 
         std::unique_ptr<OpT> newOp(new OpT);
+        newOp->name = outputExprOp->name()->str();
         newOp->type       = outputExprOp->type();
         newOp->main.type  = outputExprOp->main_type();
         newOp->main.value = const_cast<void*>(outputExprOp->main());
@@ -35,7 +36,7 @@ public:
         // find the matched input, then replace it
         const int size = outputExprInputs.size();
         for (int i = 0; i < size; ++i) {
-            if (outputExprInputs[i] == outputVaribale.lock()) {
+            if (outputExprInputs[i]->expr().first.get() == outputExpr.get()) {
                 outputExprInputs[i] = inputs[0];
                 break;
             }

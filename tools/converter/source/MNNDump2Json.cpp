@@ -56,6 +56,17 @@ int main(int argc, const char** argv) {
             } else if (type == MNN::OpParameter::OpParameter_Extra) {
                 auto extra = opParam->main.AsExtra();
                 extra->info.clear();
+            } else if(type == MNN::OpParameter::OpParameter_LSTM){
+                auto param = opParam->main.AsLSTM();
+                if (param->weightH) {
+                    param->weightH->float32s.clear();
+                }
+                if (param->weightI) {
+                    param->weightI->float32s.clear();
+                }
+                if (param->bias) {
+                    param->bias->float32s.clear();
+                }
             }
         }
         flatbuffers::FlatBufferBuilder newBuilder(1024);

@@ -6,11 +6,11 @@
 //  Copyright © 2018, Alibaba Group Holding Limited
 //
 
-#import "MetalBackend.hpp"
+#import "backend/metal/MetalBackend.hpp"
 #import <mutex>
-#import "MNNMetalContext.h"
-#import "Macro.h"
-#import "TensorUtils.hpp"
+#import "backend/metal/MNNMetalContext.h"
+#import "core/Macro.h"
+#import "core/TensorUtils.hpp"
 
 #if MNN_METAL_ENABLED
 
@@ -70,6 +70,7 @@ bool MetalBackend::onAcquireBuffer(const Tensor *_tensor, StorageType storageTyp
             auto iter = mReusableBuffers.lower_bound(size);
             if (iter != mReusableBuffers.end()) {
                 tensor->buffer().device = iter->second;
+                mDynamicBuffers.insert(std::make_pair((void*)iter->second, iter->first));
                 mReusableBuffers.erase(iter);
                 return true;
             }
@@ -163,7 +164,7 @@ Execution *MetalBackend::onCreate(const std::vector<Tensor *> &inputs, const std
     }
     auto exe = iter->second->onCreate(inputs, op, this);
     if (NULL == exe) {
-        MNN_PRINT("The Creator Don't support type %d, %s\n", op->type(), op->name()->c_str());
+        MNN_PRINT("The Creator Don't support type %d, %s\n", op->type(), op->name() ? op->name()->c_str() : "");
         return NULL;
     }
     return exe;

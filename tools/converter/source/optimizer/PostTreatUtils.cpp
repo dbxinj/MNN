@@ -10,6 +10,7 @@
 #include <mutex>
 #include <set>
 using namespace MNN;
+
 template <typename T>
 bool inVector(const std::vector<T>& vec, const T& val) {
     return std::find(vec.begin(), vec.end(), val) != vec.end();
@@ -93,4 +94,16 @@ void PostTreatUtils::_removeOpInNet(MNN::OpT* op, MNN::NetT* net) {
             break;
         }
     }
+}
+
+bool PostTreatUtils::_replace(std::vector<int> &indexes, int freshIndex, int oldIndex){
+    auto iter = indexes.begin();
+    while (iter != indexes.end()) {
+        if(*iter == oldIndex){
+            *iter = freshIndex;
+            return true;
+        }
+        ++iter;
+    }
+    return false;
 }
